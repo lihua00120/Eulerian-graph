@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>一筆畫大挑戰！</title>
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --bg: #F3F4F6;
+            --text: #1F2937;
+            --node: #3B82F6;
+            --node-hover: #60A5FA;
+            --node-active: #EF4444;
+            --line-empty: #D1D5DB;
+            --line-filled: #10B981;
+        }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: var(--primary);
+            margin-bottom: 5px;
+            text-align: center;
+        }
+        p.subtitle {
+            margin-top: 0;
+            color: #6B7280;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .game-container {
+            background: white;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+        .level-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        svg {
+            background-color: #FAFAFA;
+            border: 2px solid #E5E7EB;
+            border-radius: 12px;
+            display: block;
+            touch-action: none; /* 防止手機滑動干擾 */
+        }
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+        /* Modal 樣式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            visibility: hidden;
+            opacity: 0;
+            transition: 0.3s;
+            z-index: 1000;
+        }
+        .modal-overlay.active {
+            visibility: visible;
+            opacity: 1;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        .modal-content h2 {
+            margin-top: 0;
+            color: var(--primary);
+        }
+        .math-secret {
+            background: #FEF3C7;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: left;
+            margin: 15px 0;
+            font-size: 1.05rem;
+            line-height: 1.5;
+            color: #92400E;
+        }
+        .math-secret strong {
+            color: #B45309;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🖍️ 一筆畫大挑戰！</h1>
+    <p class="subtitle">點擊圓點連線，不能重複畫過同一條線喔！</p>
+
+    <div class="game-container">
+        <div class="level-info">
+            <span id="level-name">第 1 關：暖身正方形</span>
+            <span id="fail-count" style="color: #EF4444; font-size: 1rem; display: none;">卡住次數：0</span>
+        </div>
+        
+        <!-- SVG 畫布 -->
+        <svg id="game-canvas" width="400" height="400"></svg>
+        
+        <div class="controls">
+            <button onclick="resetCurrentLevel()">重新畫 (畫錯了點這裡)</button>
+        </div>
+    </div>
+
+    <!-- 訊息彈出視窗 -->
+    <div id="modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 id="modal-title">標題</h2>
+            <div id="modal-text">內容</div>
+            <button id="modal-btn" onclick="closeModal()" style="margin-top: 20px;">繼續</button>
+        </div>
+    </div>
+
+    <script>
+        // 關卡設計
+        const levels = [
+            {
+                name: "第 1 關：暖身正方形",
+                nodes: [ {x: 100, y: 100}, {x: 300, y: 100}, {x: 300, y: 300}, {x: 100, y: 300} ],
+                edges: [ [0,1], [1,2], [2,3], [3,0] ]
+            },
+            {
+                name: "第 2 關：小房子",
+                nodes: [ {x: 200, y: 50}, {x: 100, y: 150}, {x: 300, y: 150}, {x: 100, y: 350}, {x: 300, y: 350} ],
+                edges: [ [0,1], [0,2], [1,2], [1,3], [3,4], [4,2] ]
+            },
+            {
+                name: "第 3 關：神祕信封",
+                nodes: [ {x: 100, y: 150}, {x: 300, y: 150}, {x: 100, y: 350}, {x: 300, y: 350}, {x: 200, y: 50} ],
+                edges: [ [0,1], [1,3], [3,2], [2,0], [0,3], [1,2], [0,4], [1,4] ]
+            },
+            {
+                name: "第 4 關：終極不可能任務？",
+                // 這是 K4 圖，一個交叉正方形，4個點都有3條線相連，數學上不可能一筆畫完成
+                nodes: [ {x: 100, y: 100}, {x: 300, y: 100}, {x: 100, y: 300}, {x: 300, y: 300} ],
+                edges: [ [0,1], [0,2], [0,3], [1,2], [1,3], [2,3] ]
+            }
+        ];
+
+        let currentLevelIndex = 0;
+        let path = []; // 記錄走過的點 index
+        let usedEdges = []; // 記錄走過的線，格式 "0-1" (確保小數字在前)
+        let failsOnCurrentLevel = 0;
+
+        const canvas = document.getElementById('game-canvas');
+        
+        // 初始化遊戲
+        function initLevel() {
+            path = [];
+            usedEdges = [];
+            document.getElementById('level-name').innerText = levels[currentLevelIndex].name;
+            
+            const failCounter = document.getElementById('fail-count');
+            if(currentLevelIndex === 3) {
+                failCounter.style.display = 'block';
+                failCounter.innerText = `卡住次數：${failsOnCurrentLevel} / 3`;
+            } else {
+                failCounter.style.display = 'none';
+            }
+            
+            draw();
+        }
+
+        // 標準化線段表示法 (例: 點3到點1 -> "1-3")
+        function getEdgeKey(n1, n2) {
+            return Math.min(n1, n2) + "-" + Math.max(n1, n2);
+        }
+
+        // 檢查兩點之間是否有線且未被畫過
+        function isValidMove(from, to) {
+            const edgeKey = getEdgeKey(from, to);
+            // 檢查線是否存在於圖形定義中
+            const edgeExists = levels[currentLevelIndex].edges.some(
+                e => (e[0] === from && e[1] === to) || (e[0] === to && e[1] === from)
+            );
+            // 檢查是否還沒畫過
+            const notUsed = !usedEdges.includes(edgeKey);
+            return edgeExists && notUsed;
+        }
+
+        // 取得目前點還可以走哪些點
+        function getAvailableMoves(nodeIndex) {
+            const moves = [];
+            levels[currentLevelIndex].edges.forEach(e => {
+                if (e[0] === nodeIndex || e[1] === nodeIndex) {
+                    const target = e[0] === nodeIndex ? e[1] : e[0];
+                    if (!usedEdges.includes(getEdgeKey(nodeIndex, target))) {
+                        moves.push(target);
+                    }
+                }
+            });
+            return moves;
+        }
+
+        // 繪製畫面
+        function draw() {
+            canvas.innerHTML = ''; // 清空畫布
+            const level = levels[currentLevelIndex];
+
+            // 1. 畫出所有底線 (灰色)
+            level.edges.forEach(e => {
+                const n1 = level.nodes[e[0]];
+                const n2 = level.nodes[e[1]];
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', n1.x);
+                line.setAttribute('y1', n1.y);
+                line.setAttribute('x2', n2.x);
+                line.setAttribute('y2', n2.y);
+                line.setAttribute('stroke', 'var(--line-empty)');
+                line.setAttribute('stroke-width', '6');
+                line.setAttribute('stroke-dasharray', '8,8'); // 虛線效果
+                canvas.appendChild(line);
+            });
+
+            // 2. 畫出走過的線 (綠色實線)
+            for (let i = 0; i < path.length - 1; i++) {
+                const n1 = level.nodes[path[i]];
+                const n2 = level.nodes[path[i+1]];
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', n1.x);
+                line.setAttribute('y1', n1.y);
+                line.setAttribute('x2', n2.x);
+                line.setAttribute('y2', n2.y);
+                line.setAttribute('stroke', 'var(--line-filled)');
+                line.setAttribute('stroke-width', '8');
+                line.setAttribute('stroke-linecap', 'round');
+                canvas.appendChild(line);
+            }
+
+            // 3. 畫出所有的點
+            level.nodes.forEach((n, index) => {
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', n.x);
+                circle.setAttribute('cy', n.y);
+                circle.setAttribute('r', '15');
+                
+                // 判斷點的顏色
+                if (path.length > 0 && path[path.length - 1] === index) {
+                    circle.setAttribute('fill', 'var(--node-active)'); // 當前所在的點 (紅色)
+                    circle.setAttribute('r', '20'); // 放大一點
+                } else if (path.includes(index)) {
+                    circle.setAttribute('fill', 'var(--node-hover)'); // 走過的點 (淺藍)
+                } else {
+                    circle.setAttribute('fill', 'var(--node)'); // 沒走過的點 (深藍)
+                }
+
+                circle.style.cursor = 'pointer';
+                circle.onclick = () => handleNodeClick(index);
+                canvas.appendChild(circle);
+            });
+        }
+
+        // 處理點擊事件
+        function handleNodeClick(index) {
+            if (path.length === 0) {
+                // 選定起點
+                path.push(index);
+                draw();
+            } else {
+                const currentNode = path[path.length - 1];
+                if (isValidMove(currentNode, index)) {
+                    path.push(index);
+                    usedEdges.push(getEdgeKey(currentNode, index));
+                    draw();
+                    checkGameState();
+                }
+            }
+        }
+
+        // 重新目前關卡
+        function resetCurrentLevel() {
+            initLevel();
+        }
+
+        // 檢查遊戲狀態 (是否過關或卡住)
+        function checkGameState() {
+            const level = levels[currentLevelIndex];
+            const isWin = usedEdges.length === level.edges.length;
+            
+            if (isWin) {
+                if (currentLevelIndex < levels.length - 1) {
+                    showModal("🎉 太厲害了！", "你成功一筆畫完了這個圖形，準備好挑戰下一關了嗎？", () => {
+                        currentLevelIndex++;
+                        failsOnCurrentLevel = 0;
+                        initLevel();
+                    }, "進入下一關");
+                }
+                return;
+            }
+
+            // 檢查是否卡住 (走進死胡同)
+            const currentNode = path[path.length - 1];
+            const availableMoves = getAvailableMoves(currentNode);
+
+            if (availableMoves.length === 0 && !isWin) {
+                failsOnCurrentLevel++;
+                
+                if (currentLevelIndex === 3) {
+                    // 第 4 關 (不可能任務) 的處理
+                    document.getElementById('fail-count').innerText = `卡住次數：${failsOnCurrentLevel} / 3`;
+                    if (failsOnCurrentLevel >= 3) {
+                        showSecretModal();
+                    } else {
+                        showModal("啊，走到死胡同了！", `這關好像特別難？再試試看！(失敗 ${failsOnCurrentLevel}/3 次)`, () => initLevel(), "重新挑戰");
+                    }
+                } else {
+                    // 前三關的提示
+                    showModal("哎呀，卡住了！", "有時候『起點』選在哪裡非常重要喔！換個點出發試試看？", () => initLevel(), "重新挑戰");
+                }
+            }
+        }
+
+        // 顯示一般訊息彈窗
+        function showModal(title, text, onConfirm, btnText = "繼續") {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-text').innerHTML = `<p>${text}</p>`;
+            const btn = document.getElementById('modal-btn');
+            btn.innerText = btnText;
+            btn.onclick = () => {
+                document.getElementById('modal').classList.remove('active');
+                onConfirm();
+            };
+            document.getElementById('modal').classList.add('active');
+        }
+
+        // 顯示數學秘密的彈窗 (破關畫面)
+        function showSecretModal() {
+            const title = "恭喜你發現了秘密！🏆";
+            const content = `
+                <p>其實，這最後一關是<b>絕對畫不出來</b>的！這不是你畫錯，而是數學的奧秘！</p>
+                <div class="math-secret">
+                    <strong>🔍 數學小偵探：</strong><br>
+                    數數看，這個圖形每個圓點連著幾條線？<br>
+                    你會發現每個點都連著「3條線」（奇數）。<br><br>
+                    在數學上，這種點叫做<b>「奇數點」</b>。如果一個圖形的奇數點超過 <b>2 個</b>，那就絕對不可能一筆畫完成！而我們這關有 4 個奇數點喔！
+                </div>
+                <p>你不放棄挑戰了3次，非常有科學家的實驗精神！你成功破解了這個遊戲！</p>
+            `;
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-text').innerHTML = content;
+            const btn = document.getElementById('modal-btn');
+            btn.innerText = "重新玩整個遊戲";
+            btn.onclick = () => {
+                document.getElementById('modal').classList.remove('active');
+                currentLevelIndex = 0;
+                failsOnCurrentLevel = 0;
+                initLevel();
+            };
+            document.getElementById('modal').classList.add('active');
+        }
+
+        // 啟動遊戲
+        initLevel();
+    </script>
+</body>
+</html>
